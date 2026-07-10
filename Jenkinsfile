@@ -55,9 +55,13 @@ pipeline {
                     rm -rf package/
                     mkdir -p package/
 
-                    # Install dependencies into the package directory
-                    if [ -s requirements.txt ]; then
+                    # Install dependencies only if requirements.txt has real entries
+                    # (ignore comments and blank lines)
+                    if grep -qvE '^\\s*#|^\\s*$' requirements.txt 2>/dev/null; then
+                        echo "📦 Found dependencies — installing via pip3..."
                         pip3 install -r requirements.txt -t package/ --upgrade
+                    else
+                        echo "ℹ️  No dependencies to install — skipping pip3."
                     fi
 
                     # Copy Lambda source code into the package directory
