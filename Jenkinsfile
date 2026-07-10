@@ -9,7 +9,7 @@ pipeline {
         LAMBDA_FUNCTION    = 'hello-world-lambda'               // Name of the Lambda function in AWS
         LAMBDA_RUNTIME     = 'python3.12'                       // Lambda runtime version
         LAMBDA_HANDLER     = 'lambda_function.lambda_handler'   // <file_name>.<function_name>
-        LAMBDA_ROLE        = ''                                 // IAM Role ARN — set via Jenkins credentials or here
+        LAMBDA_ROLE        = 'arn:aws:iam::180273188642:role/lambda_jenkins_role'  // IAM Role ARN
         LAMBDA_TIMEOUT     = '30'                               // Timeout in seconds
         LAMBDA_MEMORY      = '128'                              // Memory in MB
         ZIP_FILE           = 'lambda_function.zip'              // Deployment package name
@@ -46,22 +46,29 @@ pipeline {
             }
         }
 
-        // ── 3. Install Dependencies ────────────────
-        stage('Install Dependencies') {
+        // ── 3. Setup & Install Dependencies ────────
+        stage('Setup & Install Dependencies') {
             steps {
-                echo '📦 Installing Python dependencies...'
+                echo '📦 Setting up tools and dependencies...'
                 sh '''
+                    # Install boto3 (needed for deploy.py) using python3 -m pip
+                    python3 -m pip install --user boto3 2>/dev/null || \
+                    python3 -m ensurepip --user 2>/dev/null && python3 -m pip install --user boto3 || \
+                    echo "⚠️  Could not install boto3 via pip — checking if already available..."
+
+                    # Verify boto3 is importable
+                    python3 -c "import boto3; print('✅ boto3', boto3.__version__, 'is available')"
+
                     # Create a clean package directory
                     rm -rf package/
                     mkdir -p package/
 
-                    # Install dependencies only if requirements.txt has real entries
-                    # (ignore comments and blank lines)
+                    # Install Lambda dependencies only if requirements.txt has real entries
                     if grep -qvE '^\\s*#|^\\s*$' requirements.txt 2>/dev/null; then
-                        echo "📦 Found dependencies — installing via pip3..."
-                        pip3 install -r requirements.txt -t package/ --upgrade
+                        echo "📦 Found dependencies — installing..."
+                        python3 -m pip install -r requirements.txt -t package/ --upgrade
                     else
-                        echo "ℹ️  No dependencies to install — skipping pip3."
+                        echo "ℹ️  No Lambda dependencies to install — skipping."
                     fi
 
                     # Copy Lambda source code into the package directory
@@ -102,45 +109,7 @@ with zipfile.ZipFile('${ZIP_FILE}', 'w', zipfile.ZIP_DEFLATED) as zf:
                     ]
                 ]) {
                     sh '''
-                        # Check if the Lambda function already exists
-                        if aws lambda get-function \
-                            --function-name ${LAMBDA_FUNCTION} \
-                            --region ${AWS_REGION} > /dev/null 2>&1; then
-
-                            echo "🔄 Updating existing Lambda function..."
-                            aws lambda update-function-code \
-                                --function-name ${LAMBDA_FUNCTION} \
-                                --zip-file fileb://${ZIP_FILE} \
-                                --region ${AWS_REGION}
-
-                            echo "⏳ Waiting for function update to complete..."
-                            aws lambda wait function-updated-v2 \
-                                --function-name ${LAMBDA_FUNCTION} \
-                                --region ${AWS_REGION}
-
-                            echo "🔧 Updating function configuration..."
-                            aws lambda update-function-configuration \
-                                --function-name ${LAMBDA_FUNCTION} \
-                                --runtime ${LAMBDA_RUNTIME} \
-                                --handler ${LAMBDA_HANDLER} \
-                                --timeout ${LAMBDA_TIMEOUT} \
-                                --memory-size ${LAMBDA_MEMORY} \
-                                --region ${AWS_REGION}
-
-                        else
-                            echo "🆕 Creating new Lambda function..."
-                            aws lambda create-function \
-                                --function-name ${LAMBDA_FUNCTION} \
-                                --runtime ${LAMBDA_RUNTIME} \
-                                --handler ${LAMBDA_HANDLER} \
-                                --role ${LAMBDA_ROLE} \
-                                --zip-file fileb://${ZIP_FILE} \
-                                --timeout ${LAMBDA_TIMEOUT} \
-                                --memory-size ${LAMBDA_MEMORY} \
-                                --region ${AWS_REGION}
-                        fi
-
-                        echo "✅ Deployment complete!"
+                        python3 deploy.py --action deploy --zip-file ${ZIP_FILE}
                     '''
                 }
             }
@@ -159,20 +128,7 @@ with zipfile.ZipFile('${ZIP_FILE}', 'w', zipfile.ZIP_DEFLATED) as zf:
                     ]
                 ]) {
                     sh '''
-                        # Invoke the Lambda function with a test payload
-                        aws lambda invoke \
-                            --function-name ${LAMBDA_FUNCTION} \
-                            --payload '{"name": "Jenkins Pipeline"}' \
-                            --cli-binary-format raw-in-base64-out \
-                            --region ${AWS_REGION} \
-                            response.json
-
-                        echo "📋 Lambda response:"
-                        cat response.json
-                        echo ""
-
-                        # Cleanup
-                        rm -f response.json
+                        python3 deploy.py --action verify
                     '''
                 }
             }
