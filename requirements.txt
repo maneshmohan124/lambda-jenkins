@@ -1,0 +1,2 @@
+# No external dependencies required for this simple Lambda function.
+# Add dependencies here if needed in the future.
