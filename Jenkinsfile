@@ -75,9 +75,15 @@ pipeline {
             steps {
                 echo '📦 Creating deployment package...'
                 sh '''
-                    cd package/
-                    zip -r9 ../${ZIP_FILE} .
-                    cd ..
+                    python3 -c "
+import zipfile, os
+with zipfile.ZipFile('${ZIP_FILE}', 'w', zipfile.ZIP_DEFLATED) as zf:
+    for root, dirs, files in os.walk('package'):
+        for f in files:
+            full = os.path.join(root, f)
+            arcname = os.path.relpath(full, 'package')
+            zf.write(full, arcname)
+"
                     echo "✅ Package created: $(ls -lh ${ZIP_FILE})"
                 '''
             }
