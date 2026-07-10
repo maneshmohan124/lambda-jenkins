@@ -6,7 +6,7 @@ pipeline {
     // ──────────────────────────────────────────────
     environment {
         AWS_REGION         = 'us-east-1'                        // AWS region where the Lambda lives
-        LAMBDA_FUNCTION    = 'hello-world-lambda'               // Name of the Lambda function in AWS
+        LAMBDA_FUNCTION    = 'hello-world-lambdatest'               // Name of the Lambda function in AWS
         LAMBDA_RUNTIME     = 'python3.12'                       // Lambda runtime version
         LAMBDA_HANDLER     = 'lambda_function.lambda_handler'   // <file_name>.<function_name>
         LAMBDA_ROLE        = 'arn:aws:iam::180273188642:role/lambda_jenkins_role'  // IAM Role ARN
